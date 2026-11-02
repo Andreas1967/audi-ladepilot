@@ -5,7 +5,8 @@
 const go=document.getElementById('go'),log=document.getElementById('log'),loc=document.getElementById('loc'),result=document.getElementById('result'),price=document.getElementById('price');
 function note(s){log.textContent+='\n'+s}
 document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(log.textContent);document.getElementById('copy').textContent='Kopiert!'}catch(e){note('Kopieren nicht möglich: '+e.message)}};
-function collectE5(data){const out=[];function walk(v,d=0){if(d>7||v==null)return;if(Array.isArray(v)){v.forEach(x=>walk(x,d+1));return}if(typeof v==='object'){for(const [k,x] of Object.entries(v)){if(/^(e5|super_e5|e5_price|price_e5)$/i.test(k)){const n=typeof x==='number'?x:Number(x);if(n>0.5&&n<4)out.push(n)}else if(typeof x==='object')walk(x,d+1)}}}walk(data);return out}
+function collectE5(data){return (Array.isArray(data?.stations)?data.stations:[]).filter(st=>String(st.fuelType||'').toLowerCase()==='e5').map(st=>Number(st.price)).filter(p=>Number.isFinite(p)&&p>0.5&&p<4)}
+
 go.onclick=()=>{go.disabled=true;log.textContent='Standortfreigabe wird angefragt …';result.textContent='Abfrage läuft …';price.textContent='–';
 if(!navigator.geolocation){note('Fehler: Standortfunktion nicht verfügbar');go.disabled=false;return}
 navigator.geolocation.getCurrentPosition(async p=>{
@@ -32,7 +33,7 @@ navigator.geolocation.getCurrentPosition(async p=>{
   if(!usedRadius){result.textContent='Auch innerhalb von 35 km wurden keine Tankstellen geliefert.';note('Antwort-Ausschnitt: '+JSON.stringify(data).slice(0,900));return}
   note('Antwort-Ausschnitt: '+JSON.stringify(data).slice(0,900));
   const a=collectE5(data);
-  if(!a.length){result.textContent='Tankstellen gefunden, aber Preisformat noch nicht erkannt.';note('Bitte Diagnose kopieren und im Chat senden.');return}
+  if(!a.length){result.textContent='Tankstellen gefunden, aber keine gültigen Super-E5-Preise vorhanden.';note('Bitte Diagnose kopieren und im Chat senden.');return}
   const avg=a.reduce((x,y)=>x+y,0)/a.length;
   price.textContent=avg.toLocaleString('de-DE',{minimumFractionDigits:3,maximumFractionDigits:3})+' €/l';
   const date=data.meta?.source_date||'unbekannt';
