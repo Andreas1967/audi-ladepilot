@@ -13,8 +13,32 @@ navigator.geolocation.getCurrentPosition(async p=>{
  loc.textContent='Standort erkannt; Ortsname wird ermittelt …';
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
  try{const u='https://nominatim.openstreetmap.org/reverse?'+new URLSearchParams({lat:String(lat),lon:String(lng),format:'jsonv2',zoom:'10',addressdetails:'1'});const r=await fetch(u,{headers:{Accept:'application/json'},signal:controller.signal});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json(),a=d.address||{};loc.textContent=(a.city||a.town||a.village||a.municipality||a.county||d.name||'Standort erkannt')+' und Umgebung';note('Ortsname erfolgreich ermittelt.')}catch(e){loc.textContent='Standort erkannt (Ortsname nicht verfügbar)';note('Ortsname: '+e.message)}finally{clearTimeout(timer)}
- const url='https://derspritfuchs.de/api/v1/stations?'+new URLSearchParams({lat:String(lat),lng:String(lng),radius:'10',fuel:'e5',limit:'30'});
- note('SpritFuchs-Anfrage: 10 km Umkreis, Super E5 …');
- try{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);let response;try{response=await fetch(url,{headers:{Accept:'application/json'},signal:controller.signal})}finally{clearTimeout(timer)}note('HTTP-Status: '+response.status);if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();note('JSON-Antwort empfangen.');note('Antwort-Ausschnitt: '+JSON.stringify(data).slice(0,700));const a=collectE5(data);if(!a.length){result.textContent='Antwort erhalten, aber keine E5-Preise eindeutig erkannt.';note('Bitte Diagnose kopieren und im Chat senden.');return}const avg=a.reduce((x,y)=>x+y,0)/a.length;price.textContent=avg.toLocaleString('de-DE',{minimumFractionDigits:3,maximumFractionDigits:3})+' €/l';result.textContent='Einfacher Durchschnitt aus '+a.length+' erkannten E5-Preisen · SpritFuchs-Tagesdaten';note('Erfolg: '+a.length+' E5-Werte erkannt.')}catch(e){result.textContent='Automatische Preisabfrage fehlgeschlagen.';note('Fehler: '+e.message);note('Mögliche Ursachen: CORS-Sperre, API-Adresse oder Netzwerk.')}finally{go.disabled=false}
+
+ note('Suche zunächst im Umkreis von 10 km; bei Bedarf Erweiterung auf 20 und 35 km.');
+ try{
+  let data=null,usedRadius=0;
+  for(const radius of [10,20,35]){
+   note('SpritFuchs: '+radius+' km …');
+   const url='https://derspritfuchs.de/api/v1/stations?'+new URLSearchParams({lat:String(lat),lng:String(lng),radius:String(radius),fuel:'e5',limit:'100'});
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+   let response;
+   try{response=await fetch(url,{headers:{Accept:'application/json'},signal:controller.signal})}finally{clearTimeout(timer)}
+   note('HTTP-Status: '+response.status);
+   if(!response.ok)throw Error('HTTP '+response.status);
+   data=await response.json();
+   note('Tankstellen laut API: '+(data.meta?.total??data.stations?.length??'unbekannt'));
+   if(Array.isArray(data.stations)&&data.stations.length){usedRadius=radius;break}
+  }
+  if(!usedRadius){result.textContent='Auch innerhalb von 35 km wurden keine Tankstellen geliefert.';note('Antwort-Ausschnitt: '+JSON.stringify(data).slice(0,900));return}
+  note('Antwort-Ausschnitt: '+JSON.stringify(data).slice(0,900));
+  const a=collectE5(data);
+  if(!a.length){result.textContent='Tankstellen gefunden, aber Preisformat noch nicht erkannt.';note('Bitte Diagnose kopieren und im Chat senden.');return}
+  const avg=a.reduce((x,y)=>x+y,0)/a.length;
+  price.textContent=avg.toLocaleString('de-DE',{minimumFractionDigits:3,maximumFractionDigits:3})+' €/l';
+  const date=data.meta?.source_date||'unbekannt';
+  result.textContent='Einfacher Durchschnitt aus '+a.length+' E5-Preisen · '+usedRadius+' km Umkreis · Datenstand: '+date;
+  note('Erfolg: '+a.length+' E5-Werte erkannt.');
+ }catch(e){result.textContent='Automatische Preisabfrage fehlgeschlagen.';note('Fehler: '+e.message)}
+ finally{go.disabled=false}
 },e=>{loc.textContent='Standort nicht verfügbar';note('GPS-Fehler: '+e.message);result.textContent='Keine Abfrage möglich.';go.disabled=false},{enableHighAccuracy:false,timeout:12000,maximumAge:300000})};
 </script></body></html>
